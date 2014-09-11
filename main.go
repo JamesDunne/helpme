@@ -39,9 +39,9 @@ func forward(local, remote net.Conn, logContext string) {
 func main() {
 	// Define commandline flags:
 	isHelper := flag.Bool("helper", false, "Use this to connect to someone asking for help")
-	sshServer := flag.String("ssh", "", "SSH server:port to connect to")
-	sshUserName := flag.String("user", "", "SSH username")
-	sshPassword := flag.String("pass", "", "SSH password")
+	sshServer := flag.String("ssh", default_ssh_server, "SSH server:port to connect to")
+	sshUserName := flag.String("user", default_ssh_username, "SSH username")
+	sshPassword := flag.String("pass", default_ssh_password, "SSH password")
 	localPort := flag.String("lport", "3389", "Local port")
 	remotePort := flag.String("rport", "3389", "Remote port")
 	flag.Parse()
@@ -52,6 +52,7 @@ func main() {
 		User: *sshUserName,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(*sshPassword),
+			// TODO: can also support public key authentication
 		},
 	}
 
@@ -60,7 +61,7 @@ func main() {
 		log.Printf("Connecting to SSH server %s...\n", sshAddr)
 		conn, err := ssh.Dial("tcp", sshAddr, sshConfig)
 		if err != nil {
-			log.Printf("unable to connect: %s\n", err)
+			log.Printf("Unable to connect to SSH server: %s\n", err)
 			return
 		}
 		log.Printf("Connected.\n")
@@ -179,7 +180,7 @@ func main() {
 		<-done
 	}()
 
-	log.Printf("Done. Press any key.\n")
+	log.Printf("Press enter to exit.")
 	var buffer [1]byte
 	_, _ = os.Stdin.Read(buffer[:])
 }
