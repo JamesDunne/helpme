@@ -15,7 +15,7 @@ import "code.google.com/p/go.crypto/ssh"
 var localTCPAddr *net.TCPAddr
 var done chan bool
 
-func forward(local, remote net.Conn) {
+func forward(local, remote net.Conn, logContext string) {
 	copyComplete := make(chan bool, 1)
 
 	// Copy data back 'n forth:
@@ -34,7 +34,7 @@ func forward(local, remote net.Conn) {
 	}()
 
 	<-copyComplete
-	log.Printf("%s: closed\n", remote.RemoteAddr())
+	log.Printf("%s: closed\n", logContext)
 }
 
 func main() {
@@ -84,6 +84,8 @@ func main() {
 			localAddr := net.JoinHostPort("0.0.0.0", *localPort)
 			remoteAddr := net.JoinHostPort("127.0.0.1", *remotePort)
 
+			log.Printf("Forwarding local connections from %s to remote %s\n", localAddr, remoteAddr)
+
 			go func() {
 				localListener, err := net.Listen("tcp", localAddr)
 				if err != nil {
@@ -98,24 +100,25 @@ func main() {
 				for {
 					// Accept a new local connection:
 					local, err := localListener.Accept()
-					log.Printf("%s: Accepted local connection.\n", local.RemoteAddr())
 					if err != nil {
 						log.Printf("Accept: %s\n", err)
 						done <- true
 						break
 					}
+					logContext := local.RemoteAddr().String()
+					log.Printf("%s: Accepted local connection.\n", logContext)
 
 					// Connect to the remote RDP service:
 					remote, err := conn.Dial("tcp", remoteAddr)
 					if err != nil {
-						log.Printf("%s: Unable to connect via SSH: %s\n", local.RemoteAddr(), err)
-						done <- true
-						return
+						log.Printf("%s: Unable to connect via SSH: %s\n", logContext, err)
+						local.Close()
+						continue
 					}
 					defer remote.Close()
 
 					// Start forwarding data back 'n forth:
-					go forward(local, remote)
+					go forward(local, remote, logContext)
 				}
 			}()
 		} else {
@@ -134,9 +137,10 @@ func main() {
 				return
 			}
 
+			log.Printf("Forwarding remote connections from %s to local %s\n", remoteAddr, localAddr)
+
 			go func() {
 				// Request the remote side to open a port for forwarding:
-				log.Printf("Listen for remote connections on %s...\n", remoteAddr)
 				l, err := conn.Listen("tcp", remoteAddr)
 				if err != nil {
 					log.Printf("unable to register tcp forward: %s\n", err)
@@ -150,24 +154,24 @@ func main() {
 				for {
 					// Accept a new remote connection from SSH:
 					remote, err := l.Accept()
-					log.Printf("%s: Accepted new SSH tunnel connection.\n", remote.RemoteAddr())
 					if err != nil {
 						log.Printf("Accept: %s\n", err)
 						done <- true
 						break
 					}
+					logContext := remote.RemoteAddr().String()
+					log.Printf("%s: Accepted new SSH tunnel connection.\n", logContext)
 
 					// Connect to the local RDP service:
 					local, err := net.DialTCP("tcp", nil, localTCPAddr)
 					if err != nil {
-						log.Printf("%s: Could not open local connection to: %s\n", remote.RemoteAddr(), localTCPAddr)
+						log.Printf("%s: Could not open local connection to: %s\n", logContext, localTCPAddr)
 						remote.Close()
-						done <- true
-						return
+						continue
 					}
 
 					// Start forwarding data back 'n forth:
-					go forward(local, remote)
+					go forward(local, remote, logContext)
 				}
 			}()
 		}
