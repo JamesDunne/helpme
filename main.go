@@ -13,7 +13,6 @@ import (
 import "code.google.com/p/go.crypto/ssh"
 
 var localTCPAddr *net.TCPAddr
-var done chan bool
 
 func forward(local, remote net.Conn, logContext string) {
 	copyComplete := make(chan bool, 1)
@@ -56,27 +55,28 @@ func main() {
 		},
 	}
 
-	// Connect to SSH server:
-	log.Printf("Connecting to SSH server %s...\n", sshAddr)
-	conn, err := ssh.Dial("tcp", sshAddr, sshConfig)
-	if err != nil {
-		log.Fatalf("unable to connect: %s", err)
-	}
-	log.Printf("Connected.\n")
-	defer conn.Close()
-
-	done := make(chan bool, 1)
-
-	// Intercept termination signals:
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT)
-
-	go func() {
-		<-sigc
-		done <- true
-	}()
-
 	func() {
+		// Connect to SSH server:
+		log.Printf("Connecting to SSH server %s...\n", sshAddr)
+		conn, err := ssh.Dial("tcp", sshAddr, sshConfig)
+		if err != nil {
+			log.Printf("unable to connect: %s\n", err)
+			return
+		}
+		log.Printf("Connected.\n")
+		defer conn.Close()
+
+		done := make(chan bool, 1)
+
+		// Intercept termination signals:
+		sigc := make(chan os.Signal, 1)
+		signal.Notify(sigc, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT)
+
+		go func() {
+			<-sigc
+			done <- true
+		}()
+
 		if *isHelper {
 			// Helping someone else.
 
@@ -175,8 +175,11 @@ func main() {
 				}
 			}()
 		}
+
+		<-done
 	}()
 
-	<-done
-	log.Printf("Done.\n")
+	log.Printf("Done. Press any key.\n")
+	var buffer [1]byte
+	_, _ = os.Stdin.Read(buffer[:])
 }
