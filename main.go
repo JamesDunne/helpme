@@ -46,7 +46,8 @@ func loop(sshClient *ssh.Client, localToRemote, remoteToLocal []PortForward) {
 	signal.Notify(sigc, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT)
 
 	go func() {
-		<-sigc
+		sig := <-sigc
+		log.Printf("Caught signal: %s\n", sig)
 		done <- true
 	}()
 
@@ -56,7 +57,7 @@ func loop(sshClient *ssh.Client, localToRemote, remoteToLocal []PortForward) {
 		localAddr := fwd.LocalAddr
 		remoteAddr := fwd.RemoteAddr
 
-		log.Printf("Forwarding local connections from %s to remote %s\n", localAddr, remoteAddr)
+		log.Printf("Forwarding connections from local %s to remote %s\n", localAddr, remoteAddr)
 
 		go func() {
 			localListener, err := net.Listen("tcp", localAddr)
@@ -109,7 +110,7 @@ func loop(sshClient *ssh.Client, localToRemote, remoteToLocal []PortForward) {
 			return
 		}
 
-		log.Printf("Forwarding remote connections from %s to local %s\n", remoteAddr, localAddr)
+		log.Printf("Forwarding connections from remote %s to local %s\n", remoteAddr, localAddr)
 
 		go func() {
 			// Request the remote side to open a port for forwarding:
@@ -168,6 +169,7 @@ func main() {
 		return
 	}
 
+	// Create a prompt() function to scan stdin:
 	stdinLines := bufio.NewScanner(os.Stdin)
 	var prompt = func(prompt string) string {
 		fmt.Print(prompt)
@@ -190,8 +192,8 @@ func main() {
 		}
 	}
 
+	// If port is missing, set it to 22:
 	{
-		// If port is missing, set it to 22:
 		_, _, err := net.SplitHostPort(sshAddr)
 		if err != nil {
 			if addrError, ok := err.(*net.AddrError); ok {
@@ -259,9 +261,7 @@ func main() {
 	loop(sshClient, profile.LocalToRemote, profile.RemoteToLocal)
 
 	if !*nokeyExit {
-		for stdinLines.Scan() {
-		}
-
+		// Horrendous hack to do a simple getch(). Terminal will usually be in cooked mode so will just read extra crap.
 		log.Printf("Press enter to exit.")
 		var buffer [1]byte
 		_, _ = os.Stdin.Read(buffer[:])
