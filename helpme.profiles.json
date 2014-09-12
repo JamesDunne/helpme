@@ -1,0 +1,13 @@
+{
+	"web_server": {
+		"isDefault": true,
+		"remoteToLocal": [
+			{"remote": "127.0.0.1:8080", "local": "127.0.0.1:80"}
+		]
+	},
+	"web_client": {
+		"remoteToLocal": [
+			{"local": "127.0.0.1:8080", "remote": "127.0.0.1:8080"}
+		]
+	}
+}

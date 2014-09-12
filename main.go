@@ -153,7 +153,7 @@ func loop(sshClient *ssh.Client, localToRemote, remoteToLocal []PortForward) {
 
 func main() {
 	// Define commandline flags:
-	profileName := flag.String("profile", "rdp_server", "Port-forwarding profile name to use (e.g. 'rdp_server', 'rdp_client', etc.); default is 'rdp_server'")
+	profileNameFlag := flag.String("profile", "", "Port-forwarding profile name to use (e.g. 'rdp_server', 'rdp_client', etc.)")
 	sshHostFlag := flag.String("host", "", "SSH host to connect to")
 	sshUserFlag := flag.String("user", "", "SSH user")
 	sshPasswordFlag := flag.String("password", "", "SSH password")
@@ -162,10 +162,27 @@ func main() {
 	flag.Parse()
 
 	// TODO: Parse extra profiles from JSON configuration
+	profiles, defaultProfileName, err := LoadProfiles("helpme.profiles.json")
+	if err != nil {
+		log.Printf("Unable to load JSON profiles: %s\n", err)
+	}
+	//for key, prof := range profiles {
+	//	log.Printf("%s: ssh=%+v, localToRemote=%+v, remoteToLocal=%+v\n", key, *prof.SSH, prof.LocalToRemote, prof.RemoteToLocal)
+	//}
 
-	profile, ok := DefaultProfiles[*profileName]
+	profileName := *profileNameFlag
+	if profileName == "" {
+		profileName = defaultProfileName
+	}
+
+	profile, ok := profiles[profileName]
 	if !ok {
 		log.Printf("Unable to find profile named '%s'\n", profileName)
+		return
+	}
+
+	if len(profile.LocalToRemote) == 0 && len(profile.RemoteToLocal) == 0 {
+		log.Printf("No port forwards configured for profile '%s'!\n", profileName)
 		return
 	}
 
@@ -179,6 +196,15 @@ func main() {
 	}
 
 	// SSH connection details:
+	if profile.SSH == nil {
+		profile.SSH = &DefaultSSHConnection
+	}
+
+	// Add the password authentication method if none exist:
+	if len(profile.SSH.Auth) == 0 {
+		profile.SSH.Auth = append(profile.SSH.Auth, SSHAuthMethod{Kind: SSHAuthPassword, Data: ""})
+	}
+
 	sshAddr := profile.SSH.Host
 	if sshAddr == "" {
 		sshAddr = *sshHostFlag
@@ -258,6 +284,7 @@ func main() {
 	log.Printf("Connected.\n")
 	defer sshClient.Close()
 
+	// Start the main loop:
 	loop(sshClient, profile.LocalToRemote, profile.RemoteToLocal)
 
 	if !*nokeyExit {
